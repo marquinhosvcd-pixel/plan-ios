@@ -16,6 +16,7 @@ jobs:
       SCHEME: App
       BUNDLE_ID: br.com.planescala.app
       TEAM_ID: 7VJM86LHGV
+      PROFILE_NAME: PLAN App Store
       CONFIG: Release
 
     steps:
@@ -23,7 +24,11 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Mostrar Xcode em uso
-        run: xcodebuild -version
+        run: |
+          xcodebuild -version
+          echo "SDKs:"; xcodebuild -showsdks | grep -i ios || true
+          # Para fixar uma versão específica caso o default mude:
+          # sudo xcode-select -s /Applications/Xcode_26.4.1.app
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -36,21 +41,36 @@ jobs:
       - name: Capacitor sync (copia www + gera Pods)
         run: npx cap sync ios
 
-      - name: Gravar chave de API do App Store Connect
+      - name: Instalar certificado e perfil de provisionamento
         env:
-          APPSTORE_API_KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
-          APPSTORE_API_PRIVATE_KEY_BASE64: ${{ secrets.APPSTORE_API_PRIVATE_KEY_BASE64 }}
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          PROVISIONING_PROFILE_BASE64: ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
         run: |
           set -euo pipefail
-          # Path usado pelo xcodebuild (-authenticationKeyPath) e pelo altool (~/.appstoreconnect)
-          echo "$APPSTORE_API_PRIVATE_KEY_BASE64" | base64 --decode -o "$RUNNER_TEMP/AuthKey.p8"
-          mkdir -p "$HOME/.appstoreconnect/private_keys"
-          cp "$RUNNER_TEMP/AuthKey.p8" "$HOME/.appstoreconnect/private_keys/AuthKey_${APPSTORE_API_KEY_ID}.p8"
+          CERT_PATH="$RUNNER_TEMP/cert.p12"
+          PP_PATH="$RUNNER_TEMP/profile.mobileprovision"
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
 
-      - name: Archive (assinatura automática via chave de API)
-        env:
-          APPSTORE_API_KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
-          APPSTORE_API_ISSUER_ID: ${{ secrets.APPSTORE_API_ISSUER_ID }}
+          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o "$CERT_PATH"
+          echo -n "$PROVISIONING_PROFILE_BASE64" | base64 --decode -o "$PP_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          security import "$CERT_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" >/dev/null
+          security list-keychain -d user -s "$KEYCHAIN_PATH" $(security list-keychain -d user | tr -d '"')
+
+          # Instala o perfil onde o Xcode procura
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          UUID=$(/usr/libexec/PlistBuddy -c 'Print :UUID' /dev/stdin <<< "$(security cms -D -i "$PP_PATH")")
+          cp "$PP_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/$UUID.mobileprovision"
+          echo "Perfil instalado: $UUID"
+
+      - name: Archive
         run: |
           set -euo pipefail
           xcodebuild -workspace "$WORKSPACE" \
@@ -58,38 +78,31 @@ jobs:
             -configuration "$CONFIG" \
             -destination 'generic/platform=iOS' \
             -archivePath "$RUNNER_TEMP/App.xcarchive" \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath "$RUNNER_TEMP/AuthKey.p8" \
-            -authenticationKeyID "$APPSTORE_API_KEY_ID" \
-            -authenticationKeyIssuerID "$APPSTORE_API_ISSUER_ID" \
-            CODE_SIGN_STYLE=Automatic \
+            CODE_SIGN_STYLE=Manual \
             DEVELOPMENT_TEAM="$TEAM_ID" \
-            PROVISIONING_PROFILE_SPECIFIER="" \
-            PROVISIONING_PROFILE="" \
+            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME" \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
             clean archive
 
       - name: Export IPA
-        env:
-          APPSTORE_API_KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
-          APPSTORE_API_ISSUER_ID: ${{ secrets.APPSTORE_API_ISSUER_ID }}
         run: |
           set -euo pipefail
           xcodebuild -exportArchive \
             -archivePath "$RUNNER_TEMP/App.xcarchive" \
             -exportOptionsPlist ExportOptions.plist \
-            -exportPath "$RUNNER_TEMP/export" \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath "$RUNNER_TEMP/AuthKey.p8" \
-            -authenticationKeyID "$APPSTORE_API_KEY_ID" \
-            -authenticationKeyIssuerID "$APPSTORE_API_ISSUER_ID"
+            -exportPath "$RUNNER_TEMP/export"
           ls -la "$RUNNER_TEMP/export"
 
       - name: Upload para App Store Connect
         env:
           APPSTORE_API_KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
           APPSTORE_API_ISSUER_ID: ${{ secrets.APPSTORE_API_ISSUER_ID }}
+          APPSTORE_API_PRIVATE_KEY_BASE64: ${{ secrets.APPSTORE_API_PRIVATE_KEY_BASE64 }}
         run: |
           set -euo pipefail
+          mkdir -p "$HOME/.appstoreconnect/private_keys"
+          echo -n "$APPSTORE_API_PRIVATE_KEY_BASE64" | base64 --decode \
+            -o "$HOME/.appstoreconnect/private_keys/AuthKey_${APPSTORE_API_KEY_ID}.p8"
           IPA=$(ls "$RUNNER_TEMP/export"/*.ipa | head -1)
           echo "Enviando $IPA ..."
           xcrun altool --upload-app -t ios -f "$IPA" \
@@ -103,3 +116,7 @@ jobs:
           name: App-ipa
           path: ${{ runner.temp }}/export/*.ipa
           if-no-files-found: warn
+
+      - name: Limpar keychain
+        if: always()
+        run: security delete-keychain "$RUNNER_TEMP/app-signing.keychain-db" || true
