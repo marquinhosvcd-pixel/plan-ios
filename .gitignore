@@ -1,0 +1,30 @@
+# Node
+node_modules/
+npm-debug.log*
+
+# Capacitor / CocoaPods (regenerados no CI por `npm ci` + `npx cap sync ios`)
+ios/App/Pods/
+ios/App/Podfile.lock.bak
+
+# Xcode build artifacts
+ios/App/build/
+build/
+DerivedData/
+*.xcarchive
+*.ipa
+*.dSYM.zip
+
+# Xcode user state
+**/xcuserdata/
+*.xcuserstate
+ios/App/App.xcworkspace/xcuserdata/
+
+# Segredos — NUNCA commitar
+*.p12
+*.p8
+*.mobileprovision
+*.cer
+AuthKey_*.p8
+
+# macOS
+.DS_Store
