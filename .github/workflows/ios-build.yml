@@ -16,7 +16,7 @@ jobs:
       SCHEME: App
       BUNDLE_ID: br.com.planescala.app
       TEAM_ID: 7VJM86LHGV
-      PROFILE_NAME: PLAN App Store
+      PROFILE_NAME: PLAN CI App Store
       CONFIG: Release
 
     steps:

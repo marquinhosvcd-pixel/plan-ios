@@ -13,7 +13,7 @@
     <key>provisioningProfiles</key>
     <dict>
         <key>br.com.planescala.app</key>
-        <string>PLAN App Store</string>
+        <string>PLAN CI App Store</string>
     </dict>
     <key>uploadSymbols</key>
     <true/>
