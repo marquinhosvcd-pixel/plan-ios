@@ -73,15 +73,14 @@ jobs:
       - name: Archive
         run: |
           set -euo pipefail
+          # Sem overrides de assinatura na linha de comando: eles vazariam para os
+          # targets dos Pods (Capacitor não aceita perfil). A assinatura do target App
+          # vem do project.pbxproj (Manual + "Apple Distribution" + perfil "PLAN CI App Store").
           xcodebuild -workspace "$WORKSPACE" \
             -scheme "$SCHEME" \
             -configuration "$CONFIG" \
             -destination 'generic/platform=iOS' \
             -archivePath "$RUNNER_TEMP/App.xcarchive" \
-            CODE_SIGN_STYLE=Manual \
-            DEVELOPMENT_TEAM="$TEAM_ID" \
-            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME" \
-            CODE_SIGN_IDENTITY="Apple Distribution" \
             clean archive
 
       - name: Export IPA
