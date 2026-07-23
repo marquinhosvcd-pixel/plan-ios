@@ -3,5 +3,5 @@
   "appName": "PLAN",
   "webDir": "www",
   "server": { "url": "https://planescala.com.br", "cleartext": false },
-  "ios": { "contentInset": "always", "backgroundColor": "#101828" }
+  "ios": { "contentInset": "always", "backgroundColor": "#101828", "appendUserAgent": "PLAN-iOS-App" }
 }

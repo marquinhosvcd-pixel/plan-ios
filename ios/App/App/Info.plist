@@ -24,6 +24,10 @@
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>O PLAN usa a câmera para você fotografar atestados e documentos ao anexá-los.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>O PLAN acessa suas fotos para você anexar atestados, documentos e imagens.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>O PLAN usa sua localização para registrar o ponto no local do plantão.</string>
 	<key>UIBackgroundModes</key>
